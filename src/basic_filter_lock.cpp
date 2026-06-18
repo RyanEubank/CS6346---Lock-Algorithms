@@ -34,8 +34,7 @@ namespace proj {
 	}
 
 	void BasicFilterLock::unlockImpl(uint32_t me) noexcept {
-		std::for_each(_gadgets.rbegin(), _gadgets.rend(), [=](auto& gadget) {
+		for (LockGadget& gadget : _gadgets) 
 			gadget.release(me);
-		});
 	}
 }

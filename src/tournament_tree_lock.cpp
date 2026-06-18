@@ -21,24 +21,44 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace proj {
 
-	uint32_t calcNodes(uint32_t leaves) {
-		return leaves;
-	}
+    struct lock_info {
+        uint32_t tree_index;
+        uint32_t lock_index;
+    };
+
+    std::vector<lock_info> pathFromLeafToRoot(uint32_t tree_size, uint32_t leaf) {
+        uint32_t index = tree_size + leaf;
+        std::vector<lock_info> path;
+
+        path.reserve(tree_size);
+
+        while (index > 0) {
+            uint32_t previous = index;
+            index = ((index - 1) >> 1);
+            lock_info info { index, (previous == (index << 1) + 1) ? 0u : 1u };
+            path.push_back(info);
+        }
+
+        return path;
+    }
 
 	TournamentTreeLock::TournamentTreeLock(uint32_t count): _tree() {
-		uint32_t num_nodes = calcNodes(count);
+		uint32_t num_nodes = count - 1;
 		_tree.reserve(num_nodes);
 		for (uint32_t i = 0; i < num_nodes; ++i) 
 			_tree.emplace_back(LockGadget(2));
 	}
 
 	void TournamentTreeLock::lockImpl(uint32_t me) {
-		std::cout << "Tournament Tree Lock not yet implemented!" << std::endl;
-		exit(0);
+        std::vector<lock_info> indices = pathFromLeafToRoot(_tree.size(), me);
+        for (lock_info info : indices) 
+            _tree[info.tree_index].acquire(info.lock_index);
 	}
 
 	void TournamentTreeLock::unlockImpl(uint32_t me) noexcept {
-		std::cout << "Tournament Tree Lock not yet implemented!" << std::endl;
-		exit(0);	
+        std::vector<lock_info> indices = pathFromLeafToRoot(_tree.size(), me);
+		std::for_each(indices.rbegin(), indices.rend(), [this](lock_info& info) {
+			this->_tree[info.tree_index].release(info.lock_index);
+		});
 	}
 }

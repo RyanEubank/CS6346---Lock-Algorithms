@@ -28,50 +28,35 @@ namespace proj {
 		}
 	}
 
-	uint32_t getMaxTicket(
-		const std::vector<std::unique_ptr<std::atomic<uint32_t>>>& tickets
-	) {
-		uint32_t max = 0;
-
-		for (const auto& ptr : tickets) {
-			uint32_t ticket = ptr->load(std::memory_order_relaxed);
-			max = std::max(max, ticket);
-		}
-
-		return max;
-	}
-
 	void BakeryLock::lockImpl(uint32_t me) {
 		uint32_t max = 0;
-		uint32_t ticket = 0;
+		uint32_t number = 0;
 
+        // doorway..
 		_flags[me]->store(true, std::memory_order_seq_cst);
-
 		for (const auto& ptr : _tickets) {
-			uint32_t ticket = ptr->load(std::memory_order_relaxed);
-			max = std::max(max, ticket);
+			number = ptr->load(std::memory_order_relaxed);
+			max = std::max(max, number);
 		}
-		ticket = 1 + max;
-		
+        number = 1 + max;
+        _tickets[me]->store(number, std::memory_order_relaxed);
 		_flags[me]->store(false, std::memory_order_seq_cst);
 	
+        // wait for turn...
 		for (uint32_t i = 0; i < _flags.size(); ++i) {
 			if (i == me)
 				continue;
 
 			while (_flags[i]->load(std::memory_order_relaxed)) {}
 
-			uint32_t other_ticket = _tickets[i]->load(std::memory_order_seq_cst);
-			if (other_ticket == 0)
-				continue;
+			uint32_t other = _tickets[i]->load(std::memory_order_seq_cst);
 
-			while (other_ticket < ticket || (other_ticket == ticket && i < me)) {
-				other_ticket = _tickets[i]->load(std::memory_order_seq_cst);
-			}
+			while (other != 0  && (other < number || (other == number && i < me))) 
+				other = _tickets[i]->load(std::memory_order_seq_cst);
 		}
 	}
 
 	void BakeryLock::unlockImpl(uint32_t me) noexcept {
-		_tickets[me]->store(me, std::memory_order_seq_cst);
+		_tickets[me]->store(0, std::memory_order_relaxed);
 	}
 }
