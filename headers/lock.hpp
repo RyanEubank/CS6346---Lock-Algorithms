@@ -29,6 +29,10 @@ namespace proj {
 
 		Lock(): _isLocked() {}
 
+        ~Lock() {
+            getThreadID(true);
+        }
+
 		void lock() {
 			try {
 				static_cast<derived_t*>(this)->lockImpl(getThreadID());
@@ -50,9 +54,15 @@ namespace proj {
 
 	protected:
 
-		uint32_t getThreadID() {
-			static std::atomic<uint32_t> generator {0};
-			static thread_local const int id = generator++;
+		static uint32_t getThreadID(bool reset = false) {
+            static std::atomic<uint32_t> generator {0};
+
+            if (reset) {
+                generator.store(0);
+                return 0;
+            }
+
+			thread_local int id = generator.fetch_add(1);
 			return id;
 		}
 
