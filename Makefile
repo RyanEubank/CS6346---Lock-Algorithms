@@ -30,9 +30,15 @@ all: directory $(BINARIES) $(addprefix $(BIN_DIR)/, $(EXECUTABLES))
 clean:
 	rm -f $(BIN_DIR)/*.exe $(OBJ_DIR)/*.o test/*.exe
 
+debug_clean:
+	rm -f $(BIN_DIR)/*.exe
+
 directory:
 	mkdir -p obj
 	mkdir -p bin
+
+debug: CXXFLAGS += -g -DDEBUG
+debug: debug_clean all
 
 $(EXECUTABLES): $(BINARIES)
 
