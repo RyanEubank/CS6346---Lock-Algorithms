@@ -19,12 +19,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <thread>
+#include "lock.hpp"
+
+namespace proj {
+
+	class TTASLock : public Lock<TTASLock> {
+	public:
+
+		TTASLock(uint32_t thread_count);
+
+	private:
+
+		friend class Lock<TTASLock>;
+
+		std::atomic<bool> _flag;
+        uint32_t _min_backoff;
+        uint32_t _max_backoff;
+
+		void lockImpl(uint32_t me);
+		void unlockImpl(uint32_t me) noexcept;
+	};
+}

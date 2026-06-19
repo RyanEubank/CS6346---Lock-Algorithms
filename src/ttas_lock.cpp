@@ -17,14 +17,35 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
-#pragma once
+#include "ttas_lock.hpp"
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <thread>
+namespace proj {
+
+	TTASLock::TTASLock(uint32_t count): 
+        _flag(false), 
+        _min_backoff(0), 
+        _max_backoff(512) 
+    {
+
+    }
+
+	void TTASLock::lockImpl(uint32_t me) {
+        uint32_t initialDuration = this->randomInRange(_min_backoff, _max_backoff);
+        uint32_t duration = initialDuration;
+        uint32_t maxAttempts = 100000;
+
+        while (true) {
+            uint32_t attempts = 0;
+
+            if (!_flag.exchange(true, std::memory_order_acq_rel))
+                break;
+
+            while (_flag.load(std::memory_order_acquire)) 
+                backoff(attempts, duration, maxAttempts);
+        }
+	}
+
+	void TTASLock::unlockImpl(uint32_t me) noexcept {
+		_flag.store(false, std::memory_order_release);
+	}
+}

@@ -17,14 +17,28 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
-#pragma once
+#include "tas_lock.hpp"
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <thread>
+namespace proj {
+
+	TASLock::TASLock(uint32_t count): 
+        _flag(false), 
+        _min_backoff(0), 
+        _max_backoff(512) 
+    {
+
+    }
+
+	void TASLock::lockImpl(uint32_t me) {
+        uint32_t duration = this->randomInRange(0, 128);
+        uint32_t attempts = 0;
+        uint32_t maxAttempts = 100000;
+
+        while (_flag.exchange(true, std::memory_order_acq_rel)) 
+            backoff(attempts, duration, maxAttempts);
+	}
+
+	void TASLock::unlockImpl(uint32_t me) noexcept {
+		_flag.store(false, std::memory_order_release);
+	}
+}

@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include <chrono>
+#include <numeric>
 #include <thread>
 
 #include "common.hpp"
@@ -25,64 +26,128 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "iterated_filter_lock.hpp"
 #include "bakery_lock.hpp"
 #include "tournament_tree_lock.hpp"
+#include "tas_lock.hpp"
+#include "ttas_lock.hpp"
+#include "anderson_lock.hpp"
+
+#define RESET   "\033[0m"
+#define BLUE   "\033[34m"
+#define GREEN   "\033[32m"
+#define RED   "\033[31m"
+
+using namespace std::chrono_literals;
 
 // function declarations...
-template <class T> void increment_counter(T& mtx, uint32_t& counter, uint32_t increments);
-template <class T> void testLock();
-void watch_counter(uint32_t& counter, uint32_t expected);
+template <class T> void doWork(T& mtx, uint64_t& counter, uint64_t increments);
+template <class T> void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter);
+template <class T> uint64_t measureTime(uint64_t num_threads, uint64_t workload);
+template <class T> void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload);
 
 int main(int32_t argc, char** argv) {
-	//testLock<proj::BasicFilterLock>();
-	//testLock<proj::IteratedFilterLock>();
-	//testLock<proj::TournamentTreeLock>();
-	testLock<proj::BakeryLock>();
+    if (argc < 3) {
+        std::cerr << "Usage: main.exe <threads> <workload> <runs>\n";
+        exit(EXIT_FAILURE);
+    }
+
+    uint64_t numThreads = std::strtol(argv[1], nullptr, 10);
+    uint64_t workloadPerThread = std::strtol(argv[2], nullptr, 10);
+    uint64_t runs = std::strtol(argv[3], nullptr, 10);
+
+    testLock<proj::BasicFilterLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::IteratedFilterLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::TournamentTreeLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::BakeryLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::AndersonLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::TASLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::TTASLock>(runs, numThreads, workloadPerThread);
+
+    return EXIT_SUCCESS;
 }
 
 template <class T>
-void increment_counter(T& mtx, uint32_t& counter, uint32_t increments) {
-	for (uint32_t i = 0; i < increments; ++i) {
+void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
+    uint64_t totalOperations = num_threads * workload;
+    std::vector<uint64_t> results;
+
+    std::cout << BLUE << "[*] - Starting throughput test...\n" << RESET
+            << "    \\__ Lock: " << typeid(T).name() << "\n"
+            << "    \\__ Runs: " << runs << "\n"
+            << "    \\__ Number of threads: " << num_threads << "\n"
+            << "    \\__ Operations per thread: " << workload << "\n";
+
+    for (uint64_t i = 0; i < runs; ++i) {
+        uint64_t elapsed = measureTime<T>(num_threads, workload);
+
+        if (elapsed == 0)
+            return;
+            
+        double throughput = static_cast<double>(totalOperations) / static_cast<double>(elapsed);
+        
+        std::cout << GREEN << "[+] - Run " << i + 1 << " finished!\n" << RESET
+                  << "    \\__ Time elapsed (milliseconds): " << elapsed << "\n"
+                  << "    \\__ Throughput: " << throughput << " operations per millisecond.\n";
+
+        results.push_back(throughput);
+    }
+
+    double average = std::reduce(results.begin(), results.end(), 0.0) / results.size();
+    std::cout << "[+] - Average throughput per run: " << average 
+              << " operations per millisecond\n" << std::endl;
+}
+
+template <class T>
+void doWork(T& mtx, uint64_t& counter, uint64_t workload) {
+	for (uint64_t i = 0; i < workload; ++i) {
 		mtx.lock();
-		counter++;
+		++counter;
 		mtx.unlock();
 	}
 }
 
-void watch_counter(uint32_t& counter, uint32_t expected) {
-	while (counter < expected) {
-		std::cout << "Value of counter is: " << counter << "\n";
-		std::this_thread::sleep_for(std::chrono::seconds(5));
-	}
+template <class T>
+void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds duration) {
+    std::cout << "[*] - DEBUG INFO\n";
+
+	while (counter < max) {
+        std::cout << "\r\033[2K    \\__ Counter value: " << counter << "   " << std::flush;
+        std::this_thread::sleep_for(duration);
+    }
+
+    std::cout << "\r\033[2K    \\__ Counter value: " << counter << "   \n";
 }
 
 template <class T>
-void testLock() {
-	uint32_t counter = 0;
-	uint32_t num_threads = 10;
-	uint32_t num_increments = 100000;
-	uint32_t expected_value = num_threads * num_increments;
-
-	std::vector<std::thread> workers;
-	workers.reserve(num_threads);
+void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter) {
+    std::vector<std::thread> workers;
+	workers.reserve(num_threads + 1);
 
 	T mutex(num_threads);
 
-	for (uint32_t i = 0; i < num_threads; ++i) {
-		workers.emplace_back(
-			increment_counter<T>,
-			std::reference_wrapper(mutex),
-			std::reference_wrapper(counter),
-			num_increments
-		);
-	}
+#ifdef DEBUG
+    workers.emplace_back(displayCounter<T>, std::ref(counter), workload * num_threads, 1500ms);
+#endif
 
-	workers.emplace_back(
-		watch_counter, 
-		std::reference_wrapper(counter), 
-		expected_value
-	);
-
-	for (auto& thread : workers)
+	for (uint64_t i = 0; i < num_threads; ++i) 
+		workers.emplace_back(doWork<T>, std::ref(mutex), std::ref(counter), workload);
+    
+	for (std::thread& thread : workers) 
 		thread.join();
-	
-	std::cout << "The final count is: " << counter << std::endl;
+}
+
+template <class T>
+uint64_t measureTime(uint64_t num_threads, uint64_t workload) {
+    uint64_t counter = 0;
+    uint64_t numTasks = num_threads * workload;
+
+    auto start = std::chrono::steady_clock::now();
+    startThreads<T>(num_threads, workload, counter);
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    if (counter != numTasks) {
+        std::cerr << RED << "[-] - Mutual exclusion failed. Expected: " 
+                  << numTasks << " Actual: " << counter << std::endl; 
+        return 0;
+    }
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 }

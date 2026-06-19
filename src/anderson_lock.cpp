@@ -17,14 +17,26 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
-#pragma once
+#include "anderson_lock.hpp"
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <thread>
+namespace proj {
+
+	AndersonLock::AndersonLock(uint32_t count): _slots(count), _flags(), _next(0) {
+        _flags.reserve(count);
+        _flags.emplace_back(std::make_unique<std::atomic<bool>>(true));
+        for (uint32_t i = 1; i < count; ++i)
+            _flags.emplace_back(std::make_unique<std::atomic<bool>>(false));
+    }
+
+	void AndersonLock::lockImpl(uint32_t me) {
+        _slots[me] = _next.fetch_add(1, std::memory_order_acq_rel);
+        while (!_flags[_slots[me] % _flags.size()]->load(std::memory_order_acquire)) {
+            CPU_PAUSE();
+        }
+	}
+
+	void AndersonLock::unlockImpl(uint32_t me) noexcept {
+        _flags[_slots[me] % _flags.size()]->store(false, std::memory_order_release);
+		_flags[(_slots[me] + 1) % _flags.size()]->store(true, std::memory_order_release);
+	}
+}

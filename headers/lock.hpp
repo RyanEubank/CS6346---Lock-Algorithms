@@ -19,7 +19,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <immintrin.h>
 #include "common.hpp"
+
+#if defined(__GNUC__) || defined(__clang__)
+    #define CPU_PAUSE() __builtin_ia32_pause()
+#elif defined(_MSC_VER)
+    #define CPU_PAUSE() _mm_pause()
+#else
+    #define CPU_PAUSE()
+#endif
 
 namespace proj {
 
@@ -66,6 +75,33 @@ namespace proj {
 			return id;
 		}
 
+        uint64_t randomInRange(uint16_t min, uint16_t max) {
+            std::mt19937 generator(std::random_device{}());
+            std::uniform_int_distribution<uint64_t> distribution(min, max);
+            return distribution(generator);
+        }
+
+        void hardWait(uint32_t duration) {
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(duration * 1us);
+        }
+
+        void softWait(uint32_t duration) {
+            for (uint32_t i = 0; i < duration; ++i)
+                CPU_PAUSE();
+        }
+
+        void backoff(uint32_t& attempts, uint32_t& duration, uint32_t max) {
+            if (attempts++ < max) {
+                softWait(duration);
+                duration = std::min(duration << 1, max);
+            }
+            else {
+                hardWait(this->randomInRange(max, max << 2));
+                std::this_thread::yield();
+            }
+        }
+        
 	private:
 		bool _isLocked;
 	};

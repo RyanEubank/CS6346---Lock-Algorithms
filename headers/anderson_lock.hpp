@@ -19,12 +19,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <thread>
+#include <vector>
+#include "lock.hpp"
+
+#include <mutex>
+
+namespace proj {
+
+	class AndersonLock : public Lock<AndersonLock> {
+	public:
+
+		AndersonLock(uint32_t thread_count);
+
+		~AndersonLock() {
+			this->unlock();
+		}
+
+	private:
+
+		friend class Lock<AndersonLock>;
+
+        inline static std::mutex _mtx; 
+        std::vector<uint32_t> _slots;
+		std::vector<std::unique_ptr<std::atomic<bool>>> _flags;
+        std::atomic<uint32_t> _next;
+
+		void lockImpl(uint32_t me);
+		void unlockImpl(uint32_t me) noexcept;
+	};
+}
