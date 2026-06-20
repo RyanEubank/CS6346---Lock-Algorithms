@@ -17,26 +17,33 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
-#pragma once
-
-#include "lock.hpp"
+#include "chl_lock.hpp"
 
 namespace proj {
 
-	class TASLock : public Lock<TASLock> {
-	public:
+	CHLLock::CHLLock(uint32_t count):  
+        _tail(std::make_shared<qnode>()),
+        _nodes(),
+        _preds()
+    {
+        _nodes.reserve(count);
+        _preds.reserve(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            _nodes.emplace_back(std::make_shared<qnode>());
+            _preds.emplace_back(std::make_shared<qnode>());
+        }
+    }
 
-		TASLock(uint32_t thread_count);
+	void CHLLock::lockImpl(uint32_t me) {
+        _nodes[me]->isLocked.store(true, std::memory_order_release);
+        _preds[me] = _tail.exchange(_nodes[me], std::memory_order_acq_rel);
+        while (_preds[me]->isLocked.load(std::memory_order_acquire)) {
+            CPU_PAUSE();
+        }
+	}
 
-	private:
-
-		friend class Lock<TASLock>;
-
-		std::atomic<bool> _flag;
-        const uint32_t _min_backoff;
-        const uint32_t _max_backoff;
-
-		void lockImpl(uint32_t me);
-		void unlockImpl(uint32_t me) noexcept;
-	};
+	void CHLLock::unlockImpl(uint32_t me) noexcept {
+        _nodes[me]->isLocked.store(false, std::memory_order_release);
+        _nodes[me] = _preds[me];
+	}
 }

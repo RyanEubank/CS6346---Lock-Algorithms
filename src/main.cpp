@@ -29,6 +29,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "tas_lock.hpp"
 #include "ttas_lock.hpp"
 #include "anderson_lock.hpp"
+#include "chl_lock.hpp"
+#include "mcs_lock.hpp"
 
 #define RESET   "\033[0m"
 #define BLUE   "\033[34m"
@@ -40,8 +42,9 @@ using namespace std::chrono_literals;
 // function declarations...
 template <class T> void doWork(T& mtx, uint64_t& counter, uint64_t increments);
 template <class T> void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter);
-template <class T> uint64_t measureTime(uint64_t num_threads, uint64_t workload);
+template <class T> uint64_t timeWorkload(uint64_t num_threads, uint64_t workload);
 template <class T> void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload);
+void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds duration);
 
 int main(int32_t argc, char** argv) {
     if (argc < 3) {
@@ -60,13 +63,14 @@ int main(int32_t argc, char** argv) {
     testLock<proj::AndersonLock>(runs, numThreads, workloadPerThread);
     testLock<proj::TASLock>(runs, numThreads, workloadPerThread);
     testLock<proj::TTASLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::CHLLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::MCSLock>(runs, numThreads, workloadPerThread);
 
     return EXIT_SUCCESS;
 }
 
 template <class T>
 void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
-    uint64_t totalOperations = num_threads * workload;
     std::vector<uint64_t> results;
 
     std::cout << BLUE << "[*] - Starting throughput test...\n" << RESET
@@ -76,18 +80,18 @@ void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
             << "    \\__ Operations per thread: " << workload << "\n";
 
     for (uint64_t i = 0; i < runs; ++i) {
-        uint64_t elapsed = measureTime<T>(num_threads, workload);
+        uint64_t elapsed = timeWorkload<T>(num_threads, workload);
 
         if (elapsed == 0)
             return;
-            
-        double throughput = static_cast<double>(totalOperations) / static_cast<double>(elapsed);
         
-        std::cout << GREEN << "[+] - Run " << i + 1 << " finished!\n" << RESET
-                  << "    \\__ Time elapsed (milliseconds): " << elapsed << "\n"
-                  << "    \\__ Throughput: " << throughput << " operations per millisecond.\n";
-
+        double totalOperations = static_cast<double>(num_threads * workload);
+        double throughput = totalOperations / static_cast<double>(elapsed);
         results.push_back(throughput);
+
+        std::cout << GREEN << "[+] - Run " << i + 1 << " finished!\n" << RESET
+            << "    \\__ Time elapsed (milliseconds): " << elapsed << "\n"
+            << "    \\__ Throughput: " << throughput << " operations per millisecond.\n";
     }
 
     double average = std::reduce(results.begin(), results.end(), 0.0) / results.size();
@@ -104,7 +108,6 @@ void doWork(T& mtx, uint64_t& counter, uint64_t workload) {
 	}
 }
 
-template <class T>
 void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds duration) {
     std::cout << "[*] - DEBUG INFO\n";
 
@@ -124,7 +127,7 @@ void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter) {
 	T mutex(num_threads);
 
 #ifdef DEBUG
-    workers.emplace_back(displayCounter<T>, std::ref(counter), workload * num_threads, 1500ms);
+    workers.emplace_back(displayCounter, std::ref(counter), workload * num_threads, 1500ms);
 #endif
 
 	for (uint64_t i = 0; i < num_threads; ++i) 
@@ -135,7 +138,7 @@ void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter) {
 }
 
 template <class T>
-uint64_t measureTime(uint64_t num_threads, uint64_t workload) {
+uint64_t timeWorkload(uint64_t num_threads, uint64_t workload) {
     uint64_t counter = 0;
     uint64_t numTasks = num_threads * workload;
 

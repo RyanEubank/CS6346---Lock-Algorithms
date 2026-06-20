@@ -30,16 +30,11 @@ namespace proj {
 	public:
 
 		AndersonLock(uint32_t thread_count);
-
-		~AndersonLock() {
-			this->unlock();
-		}
-
+        
 	private:
 
 		friend class Lock<AndersonLock>;
-
-        inline static std::mutex _mtx; 
+        
         std::vector<uint32_t> _slots;
 		std::vector<std::unique_ptr<std::atomic<bool>>> _flags;
         std::atomic<uint32_t> _next;

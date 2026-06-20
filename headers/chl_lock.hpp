@@ -23,18 +23,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace proj {
 
-	class TASLock : public Lock<TASLock> {
+	class CHLLock : public Lock<CHLLock> {
 	public:
 
-		TASLock(uint32_t thread_count);
+		CHLLock(uint32_t thread_count);
 
 	private:
 
-		friend class Lock<TASLock>;
+		friend class Lock<CHLLock>;
 
-		std::atomic<bool> _flag;
-        const uint32_t _min_backoff;
-        const uint32_t _max_backoff;
+        struct qnode {
+            std::atomic<bool> isLocked = false;
+        };
+
+        std::atomic<std::shared_ptr<qnode>> _tail;
+        std::vector<std::shared_ptr<qnode>> _nodes;
+        std::vector<std::shared_ptr<qnode>> _preds;
 
 		void lockImpl(uint32_t me);
 		void unlockImpl(uint32_t me) noexcept;

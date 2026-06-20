@@ -29,10 +29,6 @@ namespace proj {
 
 		BakeryLock(uint32_t thread_count);
 
-		~BakeryLock() {
-			this->unlock();
-		}
-
 	private:
 
 		friend class Lock<BakeryLock>;

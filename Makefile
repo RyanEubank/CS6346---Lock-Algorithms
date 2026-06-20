@@ -3,7 +3,7 @@ SHELL = bash
 CXX = g++
 
 # compiler flags
-CXXFLAGS = -Wall -Werror -std=c++17 -pthread
+CXXFLAGS = -Wall -Werror -std=c++20 -pthread
 
 # project directories
 SRC_DIR = src

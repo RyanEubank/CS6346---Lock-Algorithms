@@ -33,8 +33,8 @@ namespace proj {
 		friend class Lock<TTASLock>;
 
 		std::atomic<bool> _flag;
-        uint32_t _min_backoff;
-        uint32_t _max_backoff;
+        const uint32_t _min_backoff;
+        const uint32_t _max_backoff;
 
 		void lockImpl(uint32_t me);
 		void unlockImpl(uint32_t me) noexcept;
