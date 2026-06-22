@@ -28,6 +28,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "tournament_tree_lock.hpp"
 #include "tas_lock.hpp"
 #include "ttas_lock.hpp"
+#include "ticket_lock.hpp"
 #include "anderson_lock.hpp"
 #include "chl_lock.hpp"
 #include "mcs_lock.hpp"
@@ -60,9 +61,10 @@ int main(int32_t argc, char** argv) {
     testLock<proj::IteratedFilterLock>(runs, numThreads, workloadPerThread);
     testLock<proj::TournamentTreeLock>(runs, numThreads, workloadPerThread);
     testLock<proj::BakeryLock>(runs, numThreads, workloadPerThread);
-    testLock<proj::AndersonLock>(runs, numThreads, workloadPerThread);
     testLock<proj::TASLock>(runs, numThreads, workloadPerThread);
     testLock<proj::TTASLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::TicketLock>(runs, numThreads, workloadPerThread);
+    testLock<proj::AndersonLock>(runs, numThreads, workloadPerThread);
     testLock<proj::CHLLock>(runs, numThreads, workloadPerThread);
     testLock<proj::MCSLock>(runs, numThreads, workloadPerThread);
 
