@@ -18,44 +18,38 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "mcs_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
-	MCSLock::MCSLock(uint32_t count):  
-        _tail(nullptr),
-        _nodes(),
-        _preds()
-    {
-        _nodes.reserve(count);
-        _preds.reserve(count);
-        for (uint32_t i = 0; i < count; ++i) {
-            _nodes.emplace_back(std::make_shared<qnode>());
-            _preds.emplace_back(std::make_shared<qnode>());
-        }
-    }
+	MCSLock::MCSLock(uint32_t count):  _tail(nullptr), _nodes(count), _preds(count) {}
 
 	void MCSLock::lockImpl(uint32_t me) {
-        _preds[me] = _tail.exchange(_nodes[me]);
+        Backoff b;
+        _preds[me] = _tail.exchange(&_nodes[me]);
+
         if (_preds[me] != nullptr) {
-            _nodes[me]->isLocked.store(true, std::memory_order_release);
-            _preds[me]->next.store(_nodes[me], std::memory_order_release);
-            while (_nodes[me]->isLocked.load(std::memory_order_acquire)) {
-                CPU_PAUSE();
+            _nodes[me].isLocked = true;
+            _preds[me]->next = &_nodes[me];
+
+            while (_nodes[me].isLocked) {
+                b.yield();
             }
         }
 	}
 
 	void MCSLock::unlockImpl(uint32_t me) noexcept {
-        if (_nodes[me]->next.load(std::memory_order_acquire) == nullptr) {
-            if (_tail.compare_exchange_strong(_nodes[me], nullptr))
+        Backoff b;
+
+        if (_nodes[me].next == nullptr) {
+            qnode* mynode = &_nodes[me];
+            if (_tail.compare_exchange_weak(mynode, nullptr, std::memory_order_acq_rel))
                 return;
-            while (_nodes[me]->next.load(std::memory_order_relaxed) == nullptr) {
-                CPU_PAUSE();
+            while (_nodes[me].next == nullptr) {
+                b.yield();
             }
         }
-        _nodes[me]
-            ->next.load(std::memory_order_acquire)
-            ->isLocked.store(false, std::memory_order_release);
-        _nodes[me]->next.store(nullptr, std::memory_order_seq_cst);
+        _nodes[me].next->isLocked = false;
+        _nodes[me].next = nullptr;
 	}
 }

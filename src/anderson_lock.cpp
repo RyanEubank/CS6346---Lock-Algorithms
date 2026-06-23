@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "anderson_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
@@ -29,9 +30,11 @@ namespace proj {
     }
 
 	void AndersonLock::lockImpl(uint32_t me) {
+        Backoff b;
+
         _slots[me] = _next.fetch_add(1, std::memory_order_acq_rel);
         while (!_flags[_slots[me] % _flags.size()]->load(std::memory_order_acquire)) {
-            CPU_PAUSE();
+            b.yield();
         }
 	}
 

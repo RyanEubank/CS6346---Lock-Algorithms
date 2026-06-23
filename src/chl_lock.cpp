@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "chl_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
@@ -35,10 +36,13 @@ namespace proj {
     }
 
 	void CHLLock::lockImpl(uint32_t me) {
+        Backoff b;
+
         _nodes[me]->isLocked.store(true, std::memory_order_release);
         _preds[me] = _tail.exchange(_nodes[me], std::memory_order_acq_rel);
+
         while (_preds[me]->isLocked.load(std::memory_order_acquire)) {
-            CPU_PAUSE();
+            b.yield();
         }
 	}
 

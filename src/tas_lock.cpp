@@ -18,24 +18,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "tas_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
-	TASLock::TASLock(uint32_t count): 
-        _flag(false), 
-        _min_backoff(0), 
-        _max_backoff(512) 
-    {
-
-    }
+	TASLock::TASLock(uint32_t count): _flag(false) {}
 
 	void TASLock::lockImpl(uint32_t me) {
-        uint32_t duration = this->randomInRange(0, 128);
-        uint32_t attempts = 0;
-        uint32_t maxAttempts = 100000;
-
-        while (_flag.exchange(true, std::memory_order_acq_rel)) 
-            backoff(attempts, duration, maxAttempts);
+        Backoff b;
+        while (_flag.exchange(true, std::memory_order_acq_rel)) {
+            b.yield();
+        }
 	}
 
 	void TASLock::unlockImpl(uint32_t me) noexcept {

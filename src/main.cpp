@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <thread>
 
 #include "common.hpp"
+
 #include "basic_filter_lock.hpp"
 #include "iterated_filter_lock.hpp"
 #include "bakery_lock.hpp"
@@ -42,7 +43,7 @@ using namespace std::chrono_literals;
 
 // function declarations...
 template <class T> void doWork(T& mtx, uint64_t& counter, uint64_t increments);
-template <class T> void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter);
+template <class T> void runTest(uint64_t num_threads, uint64_t workload, uint64_t& counter);
 template <class T> uint64_t timeWorkload(uint64_t num_threads, uint64_t workload);
 template <class T> void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload);
 void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds duration);
@@ -84,8 +85,6 @@ void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
     for (uint64_t i = 0; i < runs; ++i) {
         uint64_t elapsed = timeWorkload<T>(num_threads, workload);
 
-        if (elapsed == 0)
-            return;
         
         double totalOperations = static_cast<double>(num_threads * workload);
         double throughput = totalOperations / static_cast<double>(elapsed);
@@ -99,6 +98,42 @@ void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
     double average = std::reduce(results.begin(), results.end(), 0.0) / results.size();
     std::cout << "[+] - Average throughput per run: " << average 
               << " operations per millisecond\n" << std::endl;
+}
+
+template <class T>
+uint64_t timeWorkload(uint64_t num_threads, uint64_t workload) {
+    uint64_t counter = 0;
+    uint64_t numTasks = num_threads * workload;
+
+    auto start = std::chrono::steady_clock::now();
+    runTest<T>(num_threads, workload, counter);
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    if (counter != numTasks) {
+        std::cerr << RED << "[-] - Mutual exclusion failed. Expected: " 
+                  << numTasks << " Actual: " << counter << std::endl; 
+        exit(EXIT_FAILURE);
+    }
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+}
+
+template <class T>
+void runTest(uint64_t num_threads, uint64_t workload, uint64_t& counter) {
+    std::vector<std::thread> workers;
+	workers.reserve(num_threads + 1);
+
+	T mutex(num_threads);
+
+#ifdef DEBUG
+    workers.emplace_back(displayCounter, std::ref(counter), workload * num_threads, 1500ms);
+#endif
+
+	for (uint64_t i = 0; i < num_threads; ++i) 
+		workers.emplace_back(doWork<T>, std::ref(mutex), std::ref(counter), workload);
+    
+	for (std::thread& thread : workers) 
+		thread.join();
 }
 
 template <class T>
@@ -119,40 +154,4 @@ void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds d
     }
 
     std::cout << "\r\033[2K    \\__ Counter value: " << counter << "   \n";
-}
-
-template <class T>
-void startThreads(uint64_t num_threads, uint64_t workload, uint64_t& counter) {
-    std::vector<std::thread> workers;
-	workers.reserve(num_threads + 1);
-
-	T mutex(num_threads);
-
-#ifdef DEBUG
-    workers.emplace_back(displayCounter, std::ref(counter), workload * num_threads, 1500ms);
-#endif
-
-	for (uint64_t i = 0; i < num_threads; ++i) 
-		workers.emplace_back(doWork<T>, std::ref(mutex), std::ref(counter), workload);
-    
-	for (std::thread& thread : workers) 
-		thread.join();
-}
-
-template <class T>
-uint64_t timeWorkload(uint64_t num_threads, uint64_t workload) {
-    uint64_t counter = 0;
-    uint64_t numTasks = num_threads * workload;
-
-    auto start = std::chrono::steady_clock::now();
-    startThreads<T>(num_threads, workload, counter);
-    auto elapsed = std::chrono::steady_clock::now() - start;
-
-    if (counter != numTasks) {
-        std::cerr << RED << "[-] - Mutual exclusion failed. Expected: " 
-                  << numTasks << " Actual: " << counter << std::endl; 
-        return 0;
-    }
-
-    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 }

@@ -17,24 +17,23 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
-#pragma once
+#ifdef _MSC_VER
+    #include <intrin.h>
+#else
+    #include <x86intrin.h>
+#endif
 
-#include "lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
-	class TASLock : public Lock<TASLock> {
-	public:
+    void Backoff::yield() {
+        const uint32_t jitter = static_cast<uint32_t>(__rdtsc() & (_numPauses - 1));
+        const uint32_t pausesThisIteration = _numPauses - jitter;
 
-		TASLock(uint32_t thread_count);
-
-	private:
-
-		friend class Lock<TASLock>;
-
-		std::atomic<bool> _flag;
-
-		void lockImpl(uint32_t me);
-		void unlockImpl(uint32_t me) noexcept;
-	};
+        for (uint32_t i = 0; i < pausesThisIteration; ++i)
+            CPU_PAUSE();
+            
+        _numPauses = std::min(_numPauses << 1, MAX_PAUSES);
+    }
 }

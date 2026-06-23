@@ -18,14 +18,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "ticket_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
 	TicketLock::TicketLock(uint32_t count): _number(0), _turn(0) {}
 
 	void TicketLock::lockImpl(uint32_t me) {
+        Backoff b;
         uint32_t ticket = _number.fetch_add(1, std::memory_order_acq_rel);
-        while (_turn != ticket) {}
+        
+        while (_turn != ticket) { 
+            b.yield();
+        }
 	}
 
 	void TicketLock::unlockImpl(uint32_t me) noexcept {

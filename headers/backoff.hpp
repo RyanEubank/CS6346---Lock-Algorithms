@@ -19,54 +19,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <immintrin.h>
 #include "common.hpp"
+
+#if defined(_MSC_VER) 
+    #define CPU_PAUSE() _mm_pause()
+#elif defined(__i386__) || defined(__x86_64__) 
+    #if defined(__clang__) 
+        #define CPU_PAUSE() _mm_pause()
+    #else 
+        #define CPU_PAUSE() __builtin_ia32_pause()
+    #endif 
+#elif defined(__arm__) 
+    #define CPU_PAUSE() __yield(); 
+#else 
+    #error "Unknown ISA/compiler"
+#endif 
 
 namespace proj {
 
-	template <class derived_t>
-	class Lock {
-	public:
+	class Backoff {
+    private:
+        static constexpr uint32_t MAX_PAUSES = 64;
+        uint32_t _numPauses = 1;
 
-		Lock(): _isLocked() {}
+    public:
 
-        ~Lock() {
-            getThreadID(true);
-        }
-
-		void lock() {
-			try {
-				static_cast<derived_t*>(this)->lockImpl(getThreadID());
-				_isLocked = true;
-			}
-			catch(...) {
-				std::cout << "An error has occurred.\n";
-				unlock();
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		void unlock() noexcept {
-			if (_isLocked) {
-                _isLocked = false;
-				static_cast<derived_t*>(this)->unlockImpl(getThreadID());
-			}
-		}
-
-	protected:
-
-		static uint32_t getThreadID(bool reset = false) {
-            static std::atomic<uint32_t> generator {0};
-
-            if (reset) {
-                generator.store(0);
-                return 0;
-            }
-
-			thread_local int id = generator.fetch_add(1);
-			return id;
-		}
-        
-	private:
-		bool _isLocked;
+        void yield();
 	};
 }

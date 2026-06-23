@@ -33,13 +33,13 @@ namespace proj {
 		friend class Lock<MCSLock>;
 
         struct qnode {
-            std::atomic<bool> isLocked{false};
-            std::atomic<std::shared_ptr<qnode>> next{nullptr};
+            bool isLocked{false};
+            qnode* next{nullptr};
         };
 
-        std::atomic<std::shared_ptr<qnode>> _tail;
-        std::vector<std::shared_ptr<qnode>> _nodes;
-        std::vector<std::shared_ptr<qnode>> _preds;
+        std::atomic<qnode*> _tail;
+        std::vector<qnode> _nodes;
+        std::vector<qnode*> _preds;
 
 		void lockImpl(uint32_t me);
 		void unlockImpl(uint32_t me) noexcept;

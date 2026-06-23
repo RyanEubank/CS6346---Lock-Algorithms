@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************/
 
 #include "ttas_lock.hpp"
+#include "backoff.hpp"
 
 namespace proj {
 
@@ -30,18 +31,14 @@ namespace proj {
     }
 
 	void TTASLock::lockImpl(uint32_t me) {
-        uint32_t initialDuration = this->randomInRange(_min_backoff, _max_backoff);
-        uint32_t duration = initialDuration;
-        uint32_t maxAttempts = 100000;
+        Backoff b;
 
         while (true) {
-            uint32_t attempts = 0;
-
             if (!_flag.exchange(true, std::memory_order_acq_rel))
                 break;
 
             while (_flag.load(std::memory_order_acquire)) 
-                backoff(attempts, duration, maxAttempts);
+                b.yield();
         }
 	}
 
