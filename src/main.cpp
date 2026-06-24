@@ -44,7 +44,7 @@ using namespace std::chrono_literals;
 // function declarations...
 template <class T> void doWork(T& mtx, uint64_t& counter, uint64_t increments);
 template <class T> void runTest(uint64_t num_threads, uint64_t workload, uint64_t& counter);
-template <class T> uint64_t timeWorkload(uint64_t num_threads, uint64_t workload);
+template <class T> std::chrono::nanoseconds timeWorkload(uint64_t num_threads, uint64_t workload);
 template <class T> void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload);
 void displayCounter(uint64_t& counter, uint64_t max, std::chrono::milliseconds duration);
 
@@ -74,7 +74,7 @@ int main(int32_t argc, char** argv) {
 
 template <class T>
 void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
-    std::vector<uint64_t> results;
+    std::vector<double> results;
 
     std::cout << BLUE << "[*] - Starting throughput test...\n" << RESET
             << "    \\__ Lock: " << typeid(T).name() << "\n"
@@ -83,25 +83,26 @@ void testLock(uint64_t runs, uint64_t num_threads, uint64_t workload) {
             << "    \\__ Operations per thread: " << workload << "\n";
 
     for (uint64_t i = 0; i < runs; ++i) {
-        uint64_t elapsed = timeWorkload<T>(num_threads, workload);
-
-        
+        std::chrono::nanoseconds elapsed = timeWorkload<T>(num_threads, workload);
+        auto ms = std::chrono::duration<double, std::milli>(elapsed);
         double totalOperations = static_cast<double>(num_threads * workload);
-        double throughput = totalOperations / static_cast<double>(elapsed);
+        double throughput = totalOperations / ms.count();
         results.push_back(throughput);
 
         std::cout << GREEN << "[+] - Run " << i + 1 << " finished!\n" << RESET
-            << "    \\__ Time elapsed (milliseconds): " << elapsed << "\n"
+            << "    \\__ Time elapsed: " << ms << "\n"
             << "    \\__ Throughput: " << throughput << " operations per millisecond.\n";
     }
 
-    double average = std::reduce(results.begin(), results.end(), 0.0) / results.size();
-    std::cout << "[+] - Average throughput per run: " << average 
+    double sum = std::accumulate(results.begin(), results.end(), 0.0);
+    double avg = sum / static_cast<double>(results.size());
+
+    std::cout << "[+] - Average throughput per run: " << avg 
               << " operations per millisecond\n" << std::endl;
 }
 
 template <class T>
-uint64_t timeWorkload(uint64_t num_threads, uint64_t workload) {
+std::chrono::nanoseconds timeWorkload(uint64_t num_threads, uint64_t workload) {
     uint64_t counter = 0;
     uint64_t numTasks = num_threads * workload;
 
@@ -115,7 +116,7 @@ uint64_t timeWorkload(uint64_t num_threads, uint64_t workload) {
         exit(EXIT_FAILURE);
     }
 
-    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    return elapsed;
 }
 
 template <class T>
